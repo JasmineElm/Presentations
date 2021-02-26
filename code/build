@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+
+######  STRICT MODE  ###########################################
+
+set -u
+set -e
+# trap "echo ""Aborting due to errexit on line $LINENO. Exit code: $?"" >&2" ERR
+set -o errtrace
+set -o pipefail
+IFS=$'\n\t'
+
+######  VARIABLES    ###########################################
+
+_ME="$(basename "${0}")"
+_OUTDIR='output/'
+
+# formatting
+bold=$(tput bold)
+normal=$(tput sgr0)
+
+######  FUNCTIONS    ###########################################
+
+# Filename (IN ORDER)
+# if single file   - that's our name
+# if multiple file - use "report"
+# if specified in config/meta.yaml, use that
+
+_countMarkdown() {
+  find . -name "*.md" -type f | wc -l
+}
+
+_outFNFromMD() {
+  input=$(find . -type f -iname "*.md")
+  output=$(basename -- "$input")
+  echo "${output%.*}"
+}
+
+_yamlLineMatches() {
+  grep -c "pdf-title" config/meta.yaml
+}
+
+_outFNFromYaml(){
+  grep "pdf-title" config/meta.yaml | sed 's/pdf-title://;s/^[ \t]*//;s/[ \t]*$//;s/[][]//g;s/[^A-Za-z0-9.-]/_/g'
+}
+
+_outputFileName() {
+  outFile='report'
+  if [[ $(_countMarkdown) -eq 1 ]]; then
+    outFile=$(_outFNFromMD)
+  fi
+  if [[ $(_yamlLineMatches) -eq 1 ]]; then
+    outFile=$(_outFNFromYaml)
+  fi
+  printf "%s$outFile"
+}
+
+_makeInputFile() {
+  rm -rf .tmp && mkdir .tmp
+  tmpfile=$(date +%s).md
+  cat $(find . -iname "*.md" -exec echo "{}" \; | sort) >>".tmp/$tmpfile"
+}
+
+### BUILD ARGUMENTS ###
+#
+# some tex templates override the language param
+# declare here not in the config/meta.yaml to be safe
+
+output=$(_outputFileName)
+
+_buildPDF() {
+  logfile=$output.pdf.log
+  if [[ $s -eq 0 ]]; then
+    printf "%sbuilding pdf...\\n  See $logfile for details\\n"
+  fi
+  pandoc -t beamer              \
+    .tmp/*md                    \
+    --metadata-file=config/meta.yaml   \
+    -V lang=en-GB               \
+    --biblio=config/references.bib     \
+    --verbose                   \
+    --template template/def.tex \
+    --pdf-engine=xelatex        \
+    -o "$_OUTDIR$output".pdf    \
+    --pdf-engine=xelatex        \
+    --highlight-style=zenburn   \
+    --strip-comments            \
+    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
+  }
+
+
+
+
+
+_buildPPT() {
+  true
+}
+
+_buildHTML() {
+  true
+}
+
+_rmlogs() {
+  [ "$(find output/ -type f -iname '*.log')" ] && find output/ -type f -iname '*.log' -delete || printf "Already empty: nothing to do\n"
+}
+
+_clean() {
+      [ "$(ls -A output)" ] &&  rm -rf output && mkdir output || printf "Already empty: nothing to do\n"
+}
+
+_tidy() {
+  rm -rf .tmp
+}
+
+_print_help() {
+  cat <<HEREDOC
+Simplifies building pdf / word documents 
+
+Usage:
+  ${_ME} [BUILD OPTIONS]
+
+Build Options:
+  ${bold}-h | --help${normal}   Show this screen.
+  ${bold}-p | --pdf${normal}    build pdf
+  ${bold}-w | --word${normal}   build docx
+  ${bold}-c | --clean${normal}  clear the output directory
+  ${bold}-s | --silent${normal} remove any logs created
+HEREDOC
+}
+
+###### OPTION PARSING ##########################################  
+
+OPTIONS=hpwcs
+LONGOPTS=help,pdf,word,clean,silent
+
+# -regarding ! and PIPESTATUS see above
+# -temporarily store output to be able to check for errors
+# -activate quoting/enhanced mode (e.g. by writing out “--options”)
+# -pass arguments only via   -- "$@"   to separate them correctly
+! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
+if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+    # e.g. return value is 1
+    #  then getopt has complained about wrong arguments to stdout
+    exit 2
+fi
+# read getopt’s output this way to handle the quoting right:
+eval set -- "$PARSED"
+
+c=0 # clean up
+p=0 # create pdf
+w=0 # create word
+s=0 # silent
+h=0 # need help?
+
+if [ "$1" == '--' ]; then
+    ## no options passed = help message
+    h=1
+else
+  while true; do
+      case "$1" in
+          -p|--pdf)
+              p=1; shift;;
+          -w|--word)
+              w=1; shift;;
+          -c|--clean)
+              c=1; shift;;
+          -s|--silent)
+              s=1; shift;;
+          -h|--help)
+              h=1; shift;;
+          --)
+              shift; break;;
+          *)
+              h=1;;
+      esac
+  done 
+fi
+
+main() {
+  trap _tidy EXIT
+  if [[ $h -eq 1 ]]; then
+  # print help and nothing else...
+  _print_help
+  else
+    if [[ $c -eq 1 ]]; then _clean;  exit; fi
+    if [[ $p -eq 1 ]]; then _makeInputFile; _buildPDF; fi
+    if [[ $w -eq 1 ]]; then _makeInputFile; _buildDocx; fi
+    if [[ $s -eq 1 ]]; then _rmlogs; fi
+  fi
+}
+
+main

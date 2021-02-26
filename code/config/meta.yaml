@@ -1,0 +1,29 @@
+
+---
+author: [James Lemin]
+institute: [An institute]
+title: [Example Presentation]
+subtitle: [Demonstrating some simple config]
+tags: [comma, separated, values]
+# abstract: "Ad incididunt ut reprehenderit eiusmod nisi aliqua sunt dolor et Lorem id. Ea aliqua sit voluptate tempor consequat. Occaecat voluptate elit dolore quis et laborum irure duis in cillum duis aute. In nisi mollit enim id do aliqua. Voluptate reprehenderit laborum consectetur tempor ut id. Qui do aliquip consequat cillum et aute elit."
+keywords: [comma, separated, values]
+pdf-title: [An Example Presentation]
+author-meta: [James Lemin]
+draft: false
+date: [2021/02/23]
+titlepage: false
+toc-own-page: false
+toc-title: [Contents]
+toc-depth: [2]
+lot: True #remove line to not include List of tables
+lof: True #remove line to not include List of figures
+bibliography: [references.bib]
+biblio-title: [References]
+# mainfont: TeX Gyre Pagella
+# mainfontoptions:
+# - Numbers=Lowercase
+# - Numbers=Proportional
+output:
+  beamer_presentation:
+    slide_level: 2
+---
