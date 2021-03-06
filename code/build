@@ -72,18 +72,17 @@ _buildPDF() {
   if [[ $s -eq 0 ]]; then
     printf "%sbuilding pdf...\\n  See $logfile for details\\n"
   fi
-  pandoc -t beamer              \
-    .tmp/*md                    \
-    --metadata-file=config/meta.yaml   \
-    -V lang=en-GB               \
-    --biblio=config/references.bib     \
-    --verbose                   \
-    --template template/def.tex \
-    --pdf-engine=xelatex        \
-    -o "$_OUTDIR$output".pdf    \
-    --pdf-engine=xelatex        \
-    --highlight-style=zenburn   \
-    --strip-comments            \
+  pandoc -t beamer                    \
+    .tmp/*md                          \
+    --metadata-file=config/meta.yaml  \
+    -V lang=en-GB                     \
+    --biblio=config/references.bib    \
+    --verbose                         \
+    --template template/def.tex       \
+    -o "$_OUTDIR$output".pdf          \
+    --pdf-engine=xelatex              \
+    --highlight-style=zenburn         \
+    --strip-comments                  \
     --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
   }
 
@@ -92,11 +91,37 @@ _buildPDF() {
 
 
 _buildPPT() {
-  true
+    logfile=$output.pptx.log
+  if [[ $s -eq 0 ]]; then
+    printf "%sbuilding Powerpoint...\\n  See $logfile for details\\n"
+  fi
+  pandoc  .tmp/*md                    \
+    --metadata-file=config/meta.yaml  \
+    -V lang=en-GB                     \
+    --biblio=config/references.bib    \
+    --verbose                         \
+    -o "$_OUTDIR$output".pptx         \
+    --highlight-style=zenburn         \
+    --strip-comments                  \
+    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
 }
 
 _buildHTML() {
-  true
+      logfile=$output.html.log
+  if [[ $s -eq 0 ]]; then
+    printf "%sbuilding html...\\n  See $logfile for details\\n"
+  fi
+  pandoc  -t slidy                    \
+    .tmp/*md                          \
+    --metadata-file=config/meta.yaml  \
+    -V lang=en-GB                     \
+    --biblio=config/references.bib    \
+    --standalone                      \
+    --verbose                         \
+    -o "$_OUTDIR$output".html         \
+    --highlight-style=zenburn         \
+    --strip-comments                  \
+    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
 }
 
 _rmlogs() {
@@ -129,8 +154,8 @@ HEREDOC
 
 ###### OPTION PARSING ##########################################  
 
-OPTIONS=hpwcs
-LONGOPTS=help,pdf,word,clean,silent
+OPTIONS=hpwxcs
+LONGOPTS=help,pdf,powerpoint,html,clean,silent
 
 # -regarding ! and PIPESTATUS see above
 # -temporarily store output to be able to check for errors
@@ -147,7 +172,8 @@ eval set -- "$PARSED"
 
 c=0 # clean up
 p=0 # create pdf
-w=0 # create word
+x=0 # create pptx
+w=0 # create html slides
 s=0 # silent
 h=0 # need help?
 
@@ -159,7 +185,9 @@ else
       case "$1" in
           -p|--pdf)
               p=1; shift;;
-          -w|--word)
+          -x|--powerpoint)
+              x=1; shift;;
+          -w|--html)
               w=1; shift;;
           -c|--clean)
               c=1; shift;;
@@ -183,7 +211,8 @@ main() {
   else
     if [[ $c -eq 1 ]]; then _clean;  exit; fi
     if [[ $p -eq 1 ]]; then _makeInputFile; _buildPDF; fi
-    if [[ $w -eq 1 ]]; then _makeInputFile; _buildDocx; fi
+    if [[ $w -eq 1 ]]; then _makeInputFile; _buildHTML; fi
+    if [[ $x -eq 1 ]]; then _makeInputFile; _buildPPT; fi
     if [[ $s -eq 1 ]]; then _rmlogs; fi
   fi
 }
