@@ -86,10 +86,6 @@ _buildPDF() {
     --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
   }
 
-
-
-
-
 _buildPPT() {
     logfile=$output.pptx.log
   if [[ $s -eq 0 ]]; then
@@ -113,14 +109,15 @@ _buildHTML() {
   fi
   pandoc  -t slidy                    \
     .tmp/*md                          \
+    --css=template/def.css            \
     --metadata-file=config/meta.yaml  \
     -V lang=en-GB                     \
     --biblio=config/references.bib    \
-    --standalone                      \
     --verbose                         \
     -o "$_OUTDIR$output".html         \
     --highlight-style=zenburn         \
     --strip-comments                  \
+    --self-contained                   \
     --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
 }
 

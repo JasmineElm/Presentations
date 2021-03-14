@@ -21,21 +21,22 @@
 
 # Writing slides
 
-use `@dostoyevsky_notes_1996` to get references set: dostoyevsky_notes_1996
+use `@dostoyevsky_notes_1996` to get references set: @dostoyevsky_notes_1996
 
 ----
 
-- Eat spaghetti
-- Drink wine
+<!-- ![picture of spaghetti](figures/2.png)
 
-------------------
+adding pictures in using standard markdown syntax -->
 
-![picture of spaghetti](figures/2.png)
+----
+
+## {data-background-image="figures/3.png"}
 
 ## Going to sleep
 
-- Get in bed
-- Count sheep
++ Get in bed
++ Count sheep
 
 ----
 
