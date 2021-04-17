@@ -1,8 +1,9 @@
+# @format
 
----
 author: [James Lemin]
 institute: [An institute]
-title: [Example Presentation]
+title: 
+  - Example Presentation
 pagetitle: [A page title]
 subtitle: [Demonstrating some simple config]
 tags: [comma, separated, values]
@@ -27,4 +28,3 @@ biblio-title: [References]
 output:
   beamer_presentation:
     slide_level: 2
----

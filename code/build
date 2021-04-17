@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 
-######  STRICT MODE  ###########################################
-
-set -u
-set -e
-# trap "echo ""Aborting due to errexit on line $LINENO. Exit code: $?"" >&2" ERR
-set -o errtrace
-set -o pipefail
+set -u -e -o errtrace -o pipefail
+trap "echo ""Aborting due to errexit on line $LINENO. Exit code: $?"" >&2" ERR
 IFS=$'\n\t'
 
 ######  VARIABLES    ###########################################
@@ -20,17 +15,12 @@ normal=$(tput sgr0)
 
 ######  FUNCTIONS    ###########################################
 
-# Filename (IN ORDER)
-# if single file   - that's our name
-# if multiple file - use "report"
-# if specified in config/meta.yaml, use that
-
 _countMarkdown() {
-  find . -name "*.md" -type f | wc -l
+  find . -iwholename "./*.md" -type f | wc -l
 }
 
 _outFNFromMD() {
-  input=$(find . -type f -iname "*.md")
+  input=$(find . -type f -iwholename "./*.md")
   output=$(basename -- "$input")
   echo "${output%.*}"
 }
@@ -39,7 +29,7 @@ _yamlLineMatches() {
   grep -c "pdf-title" config/meta.yaml
 }
 
-_outFNFromYaml(){
+_outFNFromYaml() {
   grep "pdf-title" config/meta.yaml | sed 's/pdf-title://;s/^[ \t]*//;s/[ \t]*$//;s/[][]//g;s/[^A-Za-z0-9.-]/_/g'
 }
 
@@ -54,10 +44,31 @@ _outputFileName() {
   printf "%s$outFile"
 }
 
+_cleanInputFile() {
+  # files should be utf8 anyway, but explicitly change it here...
+  iconv -c --verbose -t utf8 "$1" >"$2"
+  rm "$1"
+}
+
+_concatenateFiles() {
+  # all files should have a pagebreak
+  printf "file order:\n"
+  for file in ./*.md; do
+    (
+      cat "${file}"
+      printf "\n\pagebreak\n"
+    ) >>"$1"
+    printf "%s\t$file\n"
+  done
+  sed -i '$ d' "$1" #remove the last pagebreak that we added
+}
+
 _makeInputFile() {
   rm -rf .tmp && mkdir .tmp
-  tmpfile=$(date +%s).md
-  cat $(find . -iname "*.md" -exec echo "{}" \; | sort) >>".tmp/$tmpfile"
+  tmpfile=".tmp/$(date +%s)"
+  #concatenate all the files found wi
+  _concatenateFiles "$tmpfile"
+  _cleanInputFile "$tmpfile" "$tmpfile.md"
 }
 
 ### BUILD ARGUMENTS ###
@@ -65,60 +76,39 @@ _makeInputFile() {
 # some tex templates override the language param
 # declare here not in the config/meta.yaml to be safe
 
-output=$(_outputFileName)
-
-_buildPDF() {
-  logfile=$output.pdf.log
-  if [[ $s -eq 0 ]]; then
-    printf "%sbuilding pdf...\\n  See $logfile for details\\n"
-  fi
-  pandoc -t beamer                    \
-    .tmp/*md                          \
-    --metadata-file=config/meta.yaml  \
-    -V lang=en-GB                     \
-    --biblio=config/references.bib    \
-    --verbose                         \
-    --template template/def.tex       \
-    -o "$_OUTDIR$output".pdf          \
-    --pdf-engine=xelatex              \
-    --highlight-style=zenburn         \
-    --strip-comments                  \
-    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
-  }
-
-_buildPPT() {
-    logfile=$output.pptx.log
-  if [[ $s -eq 0 ]]; then
-    printf "%sbuilding Powerpoint...\\n  See $logfile for details\\n"
-  fi
-  pandoc  .tmp/*md                    \
-    --metadata-file=config/meta.yaml  \
-    -V lang=en-GB                     \
-    --biblio=config/references.bib    \
-    --verbose                         \
-    -o "$_OUTDIR$output".pptx         \
-    --highlight-style=zenburn         \
-    --strip-comments                  \
-    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
+_determineTemplate() {
+    case "$1" in
+    html)
+      template="slidy"  ;;
+    *)
+      template="beamer"  ;;
+  esac
+  printf "%s$template"
 }
 
-_buildHTML() {
-      logfile=$output.html.log
-  if [[ $s -eq 0 ]]; then
-    printf "%sbuilding html...\\n  See $logfile for details\\n"
+_buildPresentation() {
+  local format="$1"
+  logfile="$output.$format.log"
+  if [ "$noLogFiles" = false ]; then
+    printf "%sbuilding $format...\\n  See $logfile for details\\n"
   fi
-  pandoc  -t slidy                    \
-    .tmp/*md                          \
-    --css=template/def.css            \
-    --metadata-file=config/meta.yaml  \
-    -V lang=en-GB                     \
-    --biblio=config/references.bib    \
-    --verbose                         \
-    -o "$_OUTDIR$output".html         \
-    --highlight-style=zenburn         \
-    --strip-comments                  \
-    --self-contained                   \
-    --csl=template/def.csl > "$_OUTDIR$logfile" 2>&1
+  # fix template based on output
+  template=$(_determineTemplate "$format")
+  pandoc .tmp/*.md \
+    --template="$template" \
+    --metadata-file=config/meta.yaml \
+    -V lang=en-GB \
+    --biblio=config/references.bib \
+    --template template/def.tex \
+    --pdf-engine=xelatex \
+    --highlight-style=zenburn \
+    --strip-comments \
+    --self-contained \
+    --verbose \
+    --css=template/css \
+    --csl=template/def.csl \
+    --output "$_OUTDIR$output.$format" \
+    2>&1 | tee "$_OUTDIR$logfile"
 }
 
 _rmlogs() {
@@ -126,7 +116,7 @@ _rmlogs() {
 }
 
 _clean() {
-      [ "$(ls -A output)" ] &&  rm -rf output && mkdir output || printf "Already empty: nothing to do\n"
+  [ "$(ls -A output)" ] && rm -rf output && mkdir output || printf "Already empty: nothing to do\n"
 }
 
 _tidy() {
@@ -135,7 +125,7 @@ _tidy() {
 
 _print_help() {
   cat <<HEREDOC
-Simplifies building pdf / word documents 
+Simplifies building presentations in html, powerpoint and pdf
 
 Usage:
   ${_ME} [BUILD OPTIONS]
@@ -143,16 +133,17 @@ Usage:
 Build Options:
   ${bold}-h | --help${normal}   Show this screen.
   ${bold}-p | --pdf${normal}    build pdf
-  ${bold}-w | --word${normal}   build docx
+  ${bold}-x | --pptx${normal}   build powerpoint
+  ${bold}-w | --html${normal}   build html (slidy)
   ${bold}-c | --clean${normal}  clear the output directory
   ${bold}-s | --silent${normal} remove any logs created
 HEREDOC
 }
 
-###### OPTION PARSING ##########################################  
+###### OPTION PARSING ##########################################
 
 OPTIONS=hpwxcs
-LONGOPTS=help,pdf,powerpoint,html,clean,silent
+LONGOPTS=help,pdf,pptx,html,clean,silent
 
 # -regarding ! and PIPESTATUS see above
 # -temporarily store output to be able to check for errors
@@ -160,57 +151,84 @@ LONGOPTS=help,pdf,powerpoint,html,clean,silent
 # -pass arguments only via   -- "$@"   to separate them correctly
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
-    # e.g. return value is 1
-    #  then getopt has complained about wrong arguments to stdout
-    exit 2
+  # e.g. return value is 1
+  #  then getopt has complained about wrong arguments to stdout
+  exit 2
 fi
 # read getopt’s output this way to handle the quoting right:
 eval set -- "$PARSED"
 
-c=0 # clean up
-p=0 # create pdf
-x=0 # create pptx
-w=0 # create html slides
-s=0 # silent
-h=0 # need help?
+clearOutput=false
+makeInputFile=false
+noLogFiles=false
+showHelp=false
+
+formats_array=()
 
 if [ "$1" == '--' ]; then
-    ## no options passed = help message
-    h=1
+  ## no options passed = help message
+  showHelp=true
 else
   while true; do
-      case "$1" in
-          -p|--pdf)
-              p=1; shift;;
-          -x|--powerpoint)
-              x=1; shift;;
-          -w|--html)
-              w=1; shift;;
-          -c|--clean)
-              c=1; shift;;
-          -s|--silent)
-              s=1; shift;;
-          -h|--help)
-              h=1; shift;;
-          --)
-              shift; break;;
-          *)
-              h=1;;
-      esac
-  done 
+    case "$1" in
+    -p | --pdf)
+      formats_array+=("pdf")
+      makeInputFile=true
+      shift
+      ;;
+    -x | --pptx)
+      formats_array+=("pptx")
+      makeInputFile=true
+      shift
+      ;;
+    -w | --html)
+      formats_array+=("html")
+      makeInputFile=true
+      shift
+      ;;
+    -c | --clean)
+      clearOutput=true
+      shift
+      ;;
+    -s | --silent)
+      noLogFiles=true
+      shift
+      ;;
+    -h | --help)
+      showHelp=true
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      showHelp=true
+      ;;
+    esac
+  done
 fi
 
 main() {
   trap _tidy EXIT
-  if [[ $h -eq 1 ]]; then
-  # print help and nothing else...
-  _print_help
+  if [ "$showHelp" = true ]; then
+    # print help and nothing else...
+    _print_help
   else
-    if [[ $c -eq 1 ]]; then _clean;  exit; fi
-    if [[ $p -eq 1 ]]; then _makeInputFile; _buildPDF; fi
-    if [[ $w -eq 1 ]]; then _makeInputFile; _buildHTML; fi
-    if [[ $x -eq 1 ]]; then _makeInputFile; _buildPPT; fi
-    if [[ $s -eq 1 ]]; then _rmlogs; fi
+    if [ "$clearOutput" = true ]; then
+      _clean
+      exit
+    fi
+    if [ $makeInputFile = true ]; then
+      _makeInputFile
+      output=$(_outputFileName)
+      for format in "${formats_array[@]}"; do
+        _buildPresentation "$format"
+      done
+    fi
+    if [ "$noLogFiles" = true ]; then
+      _rmlogs
+    fi
   fi
 }
 
